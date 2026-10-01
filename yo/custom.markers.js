@@ -12,8 +12,18 @@
 
    Jos karttojen osoite joskus muuttuu, muuta vain SRC alla.
    ===================================================================== */
+
+/* TARKEA: uNmINeDin oma index.html lukee taman muuttujan HETI taman
+   tiedoston jalkeen, joten se on pakko maaritella synkronisesti tassa.
+   Jos se puuttuu, koko kartta jaa lataamatta
+   ("UnminedCustomMarkers is not defined"). */
+var UnminedCustomMarkers = { isEnabled: false, markers: [] };
+
+/* Kartan omat asetukset jaetulle koodille. */
 window.KSPK_MAP = { allowBrowserZoom: false };
 
+/* Merkkilogiikka saa latautua vapaasti taman jalkeen: jaettu koodi odottaa
+   itse etta uNmINeD on ehtinyt luoda kartan ennen kuin se piirtaa mitaan. */
 (function () {
   var SRC = 'https://erboiyprogamer-source.github.io/kspk-kotisivut/assets/js/map-markers.js';
   if (window.__kspkMarkersLoaded) return;
