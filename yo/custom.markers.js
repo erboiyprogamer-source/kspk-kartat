@@ -220,14 +220,22 @@ var UnminedCustomMarkers = { isEnabled: false, markers: [] };
       img.src = url;
     });
   }
-  function canvasJpeg(img, maxDim, quality) {
+  function canvasEncode(img, maxDim, quality) {
     var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
     var scale = Math.min(1, maxDim / Math.max(w, h));
     var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
     var cv = document.createElement('canvas');
     cv.width = cw; cv.height = ch;
     cv.getContext('2d').drawImage(img, 0, 0, cw, ch);
-    return new Promise(function (resolve) { cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', quality); });
+    /* WebP pakkaa saman laadun noin 25-35 % pienempaan kuin JPEG. Jos selain
+       ei osaa koodata WebPia, toBlob palauttaa jotain muuta (yleensa PNG,
+       joka olisi valtava) — siksi tulos tarkistetaan ja pudotaan JPEGiin. */
+    return new Promise(function (resolve) {
+      cv.toBlob(function (b) {
+        if (b && b.type === 'image/webp') { resolve(b); return; }
+        cv.toBlob(function (b2) { resolve(b2); }, 'image/jpeg', quality);
+      }, 'image/webp', quality);
+    });
   }
   /* Kokeilee laskevia laatuja kunnes tavoitekoko alittuu; palauttaa
      pienimman loydetyn jos tavoitetta ei saavuteta. */
@@ -237,7 +245,7 @@ var UnminedCustomMarkers = { isEnabled: false, markers: [] };
     function next() {
       if (i >= qualities.length) return Promise.resolve(best);
       var q = qualities[i++];
-      return canvasJpeg(img, maxDim, q).then(function (b) {
+      return canvasEncode(img, maxDim, q).then(function (b) {
         if (b && (!best || b.size < best.size)) best = b;
         if (b && b.size <= targetBytes) return b;
         return next();
@@ -253,7 +261,7 @@ var UnminedCustomMarkers = { isEnabled: false, markers: [] };
       r.readAsDataURL(blob);
     });
   }
-  /* Tuottaa pikkukuvan (max 20 kt) ja isomman version (max 200 kt)
+  /* Tuottaa pikkukuvan (max 20 kt) ja isomman version (max 150 kt, WebP)
      mista tahansa selaimeen valitusta kuvasta. Jos alkuperainen tiedosto
      on jo sallittua kuvatyyppia (jpeg/png/webp) JA jo tavoitekokoa
      pienempi, sita EI pakata/pienenneta uudelleen — kaytetaan sellaisenaan. */
@@ -263,14 +271,14 @@ var UnminedCustomMarkers = { isEnabled: false, markers: [] };
       return Promise.resolve({ blob: file, type: file.type });
     }
     return shrinkToTarget(loaded.img, maxDim, targetBytes).then(function (b) {
-      return { blob: b, type: 'image/jpeg' };
+      return { blob: b, type: (b && b.type) || 'image/jpeg' };
     });
   }
   function compressImage(file) {
     return loadImageFile(file).then(function (loaded) {
       return Promise.all([
         passOrCompress(file, loaded, 260, 20 * 1024),
-        passOrCompress(file, loaded, 1600, 200 * 1024)
+        passOrCompress(file, loaded, 1600, 150 * 1024)
       ]).then(function (arr) {
         URL.revokeObjectURL(loaded.url);
         var thumb = arr[0], full = arr[1];
